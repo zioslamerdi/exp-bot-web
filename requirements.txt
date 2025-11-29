@@ -2,4 +2,5 @@ fastapi
 uvicorn
 python-telegram-bot==20.8
 jinja2
+requests
 python-multipart
