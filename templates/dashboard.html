@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <title>متجر إكسب ⚡ - لوحة التحكم</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --green: #0f0; --dark: #000; --gray: #111; }
+    body {margin:0; font-family: Arial; background:var(--dark); color:#fff; padding:20px;}
+    .container {max-width:500px; margin:auto; background:var(--gray); border-radius:15px; padding:20px; box-shadow:0 0 20px #0f0;}
+    h1 {color:var(--green); text-align:center; margin:10px 0;}
+    .balance {font-size:28px; background:#000; padding:20px; border-radius:12px; margin:20px 0; text-align:center; color:var(--green);}
+    .btn {display:block; width:100%; padding:18px; margin:12px 0; background:var(--green); color:#000; font-size:18px; font-weight:bold; border:none; border-radius:12px; cursor:pointer; transition:0.3s;}
+    .btn:hover {background:#0c0;}
+    .btn.red {background:#400; color:#fff;}
+    .btn.red:hover {background:#600;}
+    .btn.back {background:#333; color:#0f0;}
+    .input {width:100%; padding:15px; margin:10px 0; background:#222; border:1px solid #0f0; border-radius:10px; color:#fff; font-size:16px; box-sizing:border-box;}
+    .result {margin:15px 0; padding:15px; border-radius:10px; background:#001a00; border:1px solid #0f0; text-align:center; display:none;}
+    .result.error {background:#300; border-color:#f00;}
+    .loading {color:#0f0; font-weight:bold;}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>متجر إكسب ⚡</h1>
+  <div class="balance">
+    رصيدك الحالي<br>
+    <b id="current-balance">{{ "{:,}".format(balance) }} ل.س</b>
+  </div>
+
+  <!-- القائمة الرئيسية -->
+  <div id="main-menu">
+    <button class="btn" onclick="showSection('deposit')">شحن الرصيد</button>
+    <button class="btn" onclick="showSection('withdraw')">سحب الرصيد</button>
+    <button class="btn red" onclick="showSection('sell-usdt')">بيع USDT → بنك بيمو</button>
+    <a href="/" class="btn back">تسجيل خروج</a>
+  </div>
+
+  <!-- شحن الرصيد -->
+  <div id="deposit" style="display:none;">
+    <h2>شحن الرصيد</h2>
+    <button class="btn" onclick="showSection('syriatel-auto')">سيرياتيل كاش (أوتو فوري)</button>
+    <button class="btn" onclick="alert('أرسل الإثبات في البوت بعد التحويل')">إيداع USDT BEP20</button>
+    <button class="btn" onclick="alert('قريباً')">فودافون كاش / زين / آسيا</button>
+    <button class="btn back" onclick="showSection('main-menu')">رجوع</button>
+  </div>
+
+  <!-- شحن سيرياتيل كاش أوتو فوري -->
+  <div id="syriatel-auto" style="display:none;">
+    <h2>سيرياتيل كاش - أوتو فوري</h2>
+    <p>أرسل المبلغ إلى الرقم:</p>
+    <h3 style="background:#000;padding:12px;border-radius:8px;">12738076</h3>
+    <p>ثم أدخل رقم العملية هنا:</p>
+    <input type="text" id="op_id" class="input" placeholder="مثال: 241027123456" autocomplete="off">
+    <button class="btn" onclick="checkSyriatelAuto()">تحقق من العملية الآن</button>
+    <div id="syriatel-result" class="result"></div>
+    <button class="btn back" onclick="showSection('deposit')">رجوع</button>
+  </div>
+
+  <!-- سحب إلى سيرياتيل -->
+  <div id="withdraw" style="display:none;">
+    <h2>سحب إلى سيرياتيل كاش</h2>
+    <input type="number" id="withdraw-amount" class="input" placeholder="المبلغ (حد أدنى 10,000 ل.س)">
+    <input type="text" id="withdraw-phone" class="input" placeholder="رقم سيرياتيل كاش">
+    <button class="btn" onclick="withdrawSyriatel()">إرسال الطلب</button>
+    <div id="withdraw-result" class="result"></div>
+    <button class="btn back" onclick="showSection('main-menu')">رجوع</button>
+  </div>
+
+  <!-- بيع USDT → بنك بيمو -->
+  <div id="sell-usdt" style="display:none;">
+    <h2>بيع USDT → بنك بيمو (12700)</h2>
+    <input type="number" id="sell-amount" class="input" placeholder="المبلغ بالليرة (مثال: 500000)">
+    <input type="text" id="bemo-account" class="input" placeholder="رقم حسابك في بنك بيمو">
+    <button class="btn red" onclick="sellUsdtBemo()">بيع الآن</button>
+    <div id="sell-result" class="result"></div>
+    <button class="btn back" onclick="showSection('main-menu')">رجوع</button>
+  </div>
+</div>
+
+<script>
+const userId = {{ user.id }};
+let initialBalance = {{ balance }};
+
+// تبديل الأقسام
+function showSection(id) {
+  document.querySelectorAll('#main-menu, #deposit, #withdraw, #sell-usdt, #syriatel-auto').forEach(el => el.style.display = 'none');
+  document.getElementById(id).style.display = 'block';
+}
+
+// شحن سيرياتيل كاش أوتو فوري
+async function checkSyriatelAuto() {
+  const opId = document.getElementById('op_id').value.trim();
+  if (!opId || opId.length < 8) return alert("أدخل رقم العملية كاملاً");
+
+  const resultDiv = document.getElementById('syriatel-result');
+  resultDiv.style.display = 'block';
+  resultDiv.className = 'result loading';
+  resultDiv.innerHTML = "جاري إرسال رقم العملية إلى البوت...<br>انتظر قليلاً";
+
+  const res = await fetch('/deposit-syriatel-auto', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: userId, operation_id: opId})
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    resultDiv.innerHTML = data.message + "<br><span class='loading'>جاري التحقق والإضافة تلقائيًا...</span>";
+    
+    // تحديث الرصيد كل 3 ثواني حتى يتغير
+    const interval = setInterval(async () => {
+      const b = await fetch(`/balance/${userId}`).then(r => r.json());
+      if (b.balance > initialBalance) {
+        document.getElementById('current-balance').textContent = Number(b.balance).toLocaleString() + " ل.س";
+        resultDiv.innerHTML = `<b>تم إضافة الرصيد بنجاح!</b><br>رصيدك الجديد: ${b.balance.toLocaleString()} ل.س`;
+        resultDiv.className = 'result';
+        initialBalance = b.balance;
+        clearInterval(interval);
+      }
+    }, 3000);
+  } else {
+    resultDiv.className = 'result error';
+    resultDiv.innerHTML = data.error || "حدث خطأ";
+  }
+}
+
+// سحب سيرياتيل
+async function withdrawSyriatel() {
+  const amount = parseInt(document.getElementById('withdraw-amount').value);
+  const phone = document.getElementById('withdraw-phone').value.trim();
+  if (!amount || amount < 10000) return alert("الحد الأدنى 10,000 ل.س");
+  if (!phone || phone.length < 8) return alert("أدخل رقم صحيح");
+
+  const res = await fetch('/withdraw-syriatel', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: userId, amount, phone})
+  });
+  const data = await res.json();
+
+  const div = document.getElementById('withdraw-result');
+  div.style.display = 'block';
+  div.className = data.success ? 'result' : 'result error';
+  div.innerHTML = data.success ? "تم إرسال طلب السحب بنجاح!" : (data.error || "فشل");
+  if (data.success) setTimeout(() => location.reload(), 3000);
+}
+
+// بيع USDT → بيمو
+async function sellUsdtBemo() {
+  const amount = parseInt(document.getElementById('sell-amount').value);
+  const account = document.getElementById('bemo-account').value.trim();
+  if (!amount || amount < 10000) return alert("الحد الأدنى 10,000 ل.س");
+  if (!account) return alert("أدخل رقم حساب بيمو");
+
+  const res = await fetch('/sell-usdt-bemo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: userId, amount_syp: amount, bemo_account: account})
+  });
+  const data = await res.json();
+
+  const div = document.getElementById('sell-result');
+  div.style.display = 'block';
+  if (data.success) {
+    div.innerHTML = `تم بيع ${data.usdt} USDT بنجاح!<br>سيتم التحويل إلى حساب بيمو قريبًا`;
+    setTimeout(() => location.reload(), 4000);
+  } else {
+    div.className = 'result error';
+    div.innerHTML = data.error || "فشل العملية";
+  }
+}
+</script>
+</body>
+</html>
